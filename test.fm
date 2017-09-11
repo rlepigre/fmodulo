@@ -1,0 +1,18 @@
+Nat 0 0.
+zero : Nat.
+succ : Nat ⇒ Nat.
+
+add : Nat ⇒ Nat ⇒ Nat.
+
+[m]   add zero     m        → m.
+[n]   add n        zero     → n.
+[m n] add (succ n) (succ m) → succ (succ (add n m)).
+
+List 1 1.
+nil  : ∀X.List(X, zero).
+cons : ∀X.∀n.X ⇒ List(X, n) ⇒ List(X, succ n).
+
+app : ∀X.∀n.∀m.List(X, n) ⇒ List(X, m) ⇒ List(X, add n m).
+
+[l]     app nil        l → l.
+[e k l] app (cons e k) l → cons e (app k l).
