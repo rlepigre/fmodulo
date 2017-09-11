@@ -96,7 +96,7 @@ let rec print_te : out_channel -> te_ex -> unit = fun oc t ->
     | Te_Uni(r)   -> (match !r with None -> false | Some t -> is_app t)
     | _           -> false
   in
-  match t with
+  match unfold_te t with
   | Te_Var(x)     -> output_string oc (name_of x)
   | Te_Sym(s)     -> output_string oc s
   | Te_Abs(b)     ->
@@ -106,12 +106,7 @@ let rec print_te : out_channel -> te_ex -> unit = fun oc t ->
       let (l1,r1) = if is_abs t then ("(",")") else ("","") in
       let (l2,r2) = if is_app u then ("(",")") else ("","") in
       Printf.fprintf oc "%s%a%s %s%a%s" l1 print_te t r1 l2 print_te u r2
-  | Te_Uni(r)     ->
-      begin
-        match !r with
-        | None    -> output_string oc "?"
-        | Some(t) -> print_te oc t
-      end
+  | Te_Uni(r)     -> output_string oc "?"
   | Te_Wit(f,_,_) -> output_string oc ("ε" ^ binder_name f)
   | Te_UWt(_,f)   -> output_string oc ("ε" ^ binder_name f)
 
@@ -123,7 +118,7 @@ let rec print_ty : out_channel -> ty_ex -> unit = fun oc a ->
     | Ty_Uni(r)     -> (match !r with None -> false | Some a -> is_atom a)
     | _             -> false
   in
-  match a with
+  match unfold_ty a with
   | Ty_Var(x)         -> output_string oc (name_of x)
   | Ty_Sym(s,tys,tes) ->
       begin
@@ -149,12 +144,7 @@ let rec print_ty : out_channel -> ty_ex -> unit = fun oc a ->
   | Ty_FA1(b)         ->
       let (x,a) = unbind te_mkfree b in
       Printf.fprintf oc "∀%s.%a" (name_of x) print_ty a
-  | Ty_Uni(r)         ->
-      begin
-        match !r with
-        | None    -> output_string oc "?"
-        | Some(a) -> print_ty oc a
-      end
+  | Ty_Uni(r)         -> output_string oc "?"
   | Ty_UWt(_,f)       -> output_string oc ("ε" ^ binder_name f)
 
 (* Pattern data *)
@@ -217,6 +207,7 @@ let find_rules : string -> int -> sign -> (int * rule) list = fun s i si ->
 let remove_args : te_ex -> int -> te_ex * te_ex list = fun t n ->
   let rec rem acc n t =
     assert (n >= 0);
+    let t = unfold_te t in
     match (t, n) with
     | (_          , 0) -> (t, acc)
     | (Te_App(t,u), n) -> rem (u::acc) (n-1) t
@@ -273,6 +264,8 @@ let rec eq_te_ex : ?no_eval:bool -> sign -> te_ex -> te_ex -> bool =
     let x = free_of (new_var te_mkfree "<dummy>") in
     eq_te_ex ~no_eval si (subst b1 x) (subst b2 x)
   in
+  let t = unfold_te t in
+  let u = unfold_te u in
   let t = if no_eval then t else eval si t in
   let u = if no_eval then u else eval si u in
   if !debug then Printf.eprintf "DEBUG [%a =?= %a]\n%!" print_te t print_te u;
@@ -326,10 +319,11 @@ and rewrite : sign -> te_ex -> te_ex = fun si t ->
       let ts = from_opt_rev ts in
       match ts with
       | []    -> t
-      | [t]   -> t
+      | [t]   -> rewrite si t
       | t::ts ->
           let nb = List.length ts in
-          Printf.eprintf "(WARN) %i other rules apply...\n%!" nb; t
+          Printf.eprintf "(WARN) %i other rules apply...\n%!" nb;
+          rewrite si t
 
 and match_term : sign -> int -> rule -> te_ex -> te_ex option =
   fun si e r t ->
@@ -339,15 +333,20 @@ and match_term : sign -> int -> rule -> te_ex -> te_ex option =
   if eq_te_ex ~no_eval:true si t l then Some(add_args r args) else None
 
 and eval : sign -> te_ex -> te_ex = fun si t ->
-  let t = rewrite si t in
-  match t with
+  match rewrite si (unfold_te t) with
   | Te_App(t,u) ->
+      let t = eval si t in
+      let u = eval si u in
       begin
         match t with
         | Te_Abs(f) -> eval si (subst f u)
-        | t         -> Te_App(t, u)
+        | _         ->
+            (* FIXME looks hackish... *)
+            let t1 = Te_App(t, u) in
+            let t2 = rewrite si t1 in
+            if t1 == t2 then t1 else eval si t2
       end
-  | _           -> t
+  | t           -> t
 
 (* Judgements *)
 let rec has_type : sign -> ctxt -> te_ex -> ty_ex -> bool =

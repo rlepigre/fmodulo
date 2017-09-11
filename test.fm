@@ -21,3 +21,16 @@ map : ∀X.∀Y.∀n.(X ⇒ Y) ⇒ List(X, n) ⇒ List(Y, n).
 
 [f]     map f nil        → nil.
 [f e l] map f (cons e l) → cons (f e) (map f l).
+
+Term 0 0.
+abst : (Term ⇒ Term) ⇒ Term.
+appl : Term ⇒ Term ⇒ Term.
+
+id : Term.
+[] id → abst (λx.x).
+
+beta : Term ⇒ Term.
+[f u] beta (appl (abst f) u) → f u.
+
+#EVAL beta (appl (abst (λx.x)) (abst (λx.x))).
+#EVAL beta (appl id id).
