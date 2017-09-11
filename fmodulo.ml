@@ -1,6 +1,6 @@
 open Bindlib
 
-let debug = ref false
+let debug = ref true
 
 let from_opt_rev : 'a option list -> 'a list = fun l ->
   let fn acc e =
@@ -222,14 +222,46 @@ let add_args : te_expr -> te_expr list -> te_expr =
   List.fold_left (fun t u -> Te_App(t,u))
 
 (* Equality *)
-let eq_te_expr : sign -> te_expr -> te_expr -> bool = fun si t u ->
-  assert false (* TODO *)
+let rec eq_te_expr : ?no_eval:bool -> sign -> te_expr -> te_expr -> bool =
+  fun ?(no_eval=false) si t u ->
+  let eq_binders b1 b2 =
+    let x = free_of (new_var te_mkfree "<dummy>") in
+    eq_te_expr ~no_eval si (subst b1 x) (subst b2 x)
+  in
+  let t = if no_eval then t else eval si t in
+  let u = if no_eval then u else eval si u in
+  match (unfold_te t, unfold_te u) with
+  | (Te_Var(x1)   , Te_Var(x2)   ) -> eq_vars x1 x2
+  | (Te_Sym(s1)   , Te_Sym(s2)   ) -> s1 = s2
+  | (Te_Abs(b1)   , Te_Abs(b2)   ) -> eq_binders b1 b2
+  | (Te_App(t1,u1), Te_App(t2,u2)) -> eq_te_expr ~no_eval si t1 t2
+                                      && eq_te_expr ~no_eval si u1 u2
+  | (Te_Uni(r)    , t            ) -> r := Some(t); true
+  | (t            , Te_Uni(r)    ) -> r := Some(t); true
+  | (_            , _            ) -> false
 
-let eq_ty_expr : sign -> ty_expr -> ty_expr -> bool = fun si a b ->
-  assert false (* TODO *)
+and eq_ty_expr : sign -> ty_expr -> ty_expr -> bool = fun si a b ->
+  match (unfold_ty a, unfold_ty b) with
+  | (Ty_Var(x1)          , Ty_Var(x2)          ) -> eq_vars x1 x2
+  | (Ty_Sym(s1,tys1,tes1), Ty_Sym(s2,tys2,tes2)) ->
+      assert (List.length tys1 = List.length tys2);
+      assert (List.length tes1 = List.length tes2);
+      s1 = s2 && List.for_all2 (eq_ty_expr si) tys1 tys2
+      && List.for_all2 (eq_te_expr si) tes1 tes2
+  | (Ty_Fun(a1,b1)       , Ty_Fun(a2,b2)       ) ->
+      eq_ty_expr si a1 a2 && eq_ty_expr si b1 b2
+  | (Ty_FA2(b1)          , Ty_FA2(b2)          ) ->
+      let x = free_of (new_var ty_mkfree "<dummy>") in
+      eq_ty_expr si (subst b1 x) (subst b2 x)
+  | (Ty_FA1(b1)          , Ty_FA1(b2)          ) ->
+      let x = free_of (new_var te_mkfree "<dummy>") in
+      eq_ty_expr si (subst b1 x) (subst b2 x)
+  | (Ty_Uni(r)           , a                   ) -> r := Some(a); true
+  | (a                   , Ty_Uni(r)           ) -> r := Some(a); true
+  | (_                   , _                   ) -> false
 
 (* Evaluation *)
-let rec rewrite : sign -> te_expr -> te_expr = fun si t ->
+and rewrite : sign -> te_expr -> te_expr = fun si t ->
   match pattern_data t with
   | None      -> t
   | Some(s,i) ->
@@ -248,9 +280,9 @@ and match_term : sign -> int -> rule -> te_expr -> te_expr option =
   let ar = mbinder_arity r.def in
   let (l,r) = msubst r.def (Array.init ar (fun _ -> Te_Uni(ref None))) in
   let (t,args) = remove_args t e in
-  if eq_te_expr si t l then Some(add_args r args) else None
+  if eq_te_expr ~no_eval:true si t l then Some(add_args r args) else None
 
-let rec eval : sign -> te_expr -> te_expr = fun si t ->
+and eval : sign -> te_expr -> te_expr = fun si t ->
   let t = rewrite si t in
   match t with
   | Te_App(t,u) ->
@@ -264,6 +296,7 @@ let rec eval : sign -> te_expr -> te_expr = fun si t ->
 (* Judgements *)
 let rec infer : sign -> ?ctx:ctxt -> te_expr -> ty_expr =
   fun si ?(ctx=[]) t ->
+  if !debug then Printf.printf "INF %a\n%!" print_te t;
   match t with
   | Te_Var(x)   -> find x ctx
   | Te_Sym(s)   -> SMap.find s si.te_symbols
@@ -508,7 +541,6 @@ let handle_file : sign -> string -> sign = fun si fname ->
                 let tt = infer si ~ctx t in
                 let tu = infer si ~ctx u in
                 if not (eq_ty_expr si tt tu) then raise Not_found;
-                Printf.printf "(rule) %a → %a\n%!" print_te t print_te u;
                 {si with rules = rule::si.rules}
               with Not_found -> failwith "Ill-typed rule..."
         end
