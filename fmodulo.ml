@@ -605,7 +605,7 @@ let handle_file : sign -> string -> sign = fun si fname ->
                 failwith "Cannot infer the type of the left side...";
               if not (has_type si ctx u tu) then
                 failwith "Cannot infer the type of the right side...";
-              if not (eq_ty_ex si tt tu) then
+              if not (subtype si ctx u tt tu) then
                 failwith "Ill-typed rule...";
               {si with rules = rule::si.rules}
         end

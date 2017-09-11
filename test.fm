@@ -16,3 +16,8 @@ app : ∀X.∀n.∀m.List(X, n) ⇒ List(X, m) ⇒ List(X, add n m).
 
 [l]     app nil        l → l.
 [e k l] app (cons e k) l → cons e (app k l).
+
+map : ∀X.∀Y.∀n.(X ⇒ Y) ⇒ List(X, n) ⇒ List(Y, n).
+
+[f]     map f nil        → nil.
+[f e l] map f (cons e l) → cons (f e) (map f l).
