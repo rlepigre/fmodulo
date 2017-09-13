@@ -261,7 +261,7 @@ let te_uvar_occurs : te_ex option ref -> te_ex -> bool = fun u t ->
 let rec eq_te_ex : ?no_eval:bool -> sign -> te_ex -> te_ex -> bool =
   fun ?(no_eval=false) si t u ->
   let eq_binders b1 b2 =
-    let x = free_of (new_var te_mkfree "<dummy>") in
+    let x = te_mkfree (new_var te_mkfree "<dummy>") in
     eq_te_ex ~no_eval si (subst b1 x) (subst b2 x)
   in
   let t = unfold_te t in
@@ -297,10 +297,10 @@ and eq_ty_ex : sign -> ty_ex -> ty_ex -> bool = fun si a b ->
   | (Ty_Fun(a1,b1)       , Ty_Fun(a2,b2)       ) ->
       eq_ty_ex si a1 a2 && eq_ty_ex si b1 b2
   | (Ty_FA2(b1)          , Ty_FA2(b2)          ) ->
-      let x = free_of (new_var ty_mkfree "<dummy>") in
+      let x = ty_mkfree (new_var ty_mkfree "<dummy>") in
       eq_ty_ex si (subst b1 x) (subst b2 x)
   | (Ty_FA1(b1)          , Ty_FA1(b2)          ) ->
-      let x = free_of (new_var te_mkfree "<dummy>") in
+      let x = te_mkfree (new_var te_mkfree "<dummy>") in
       eq_ty_ex si (subst b1 x) (subst b2 x)
   | (Ty_Uni(r1)          , Ty_Uni(r2)          ) when r1 == r2 -> true
   | (Ty_Uni(r)           , a                   ) ->
